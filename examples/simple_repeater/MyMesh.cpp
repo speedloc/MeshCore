@@ -1527,5 +1527,6 @@ bool MyMesh::hasPendingWork() const {
 #if defined(WITH_BRIDGE)
   if (bridge.isRunning()) return true;  // bridge needs WiFi radio, can't sleep
 #endif
+  if (radio_driver.isWatchdogObserving()) return true;  // keep MCU awake for one radio duty cycle
   return _mgr->getOutboundTotal() > 0;
 }
