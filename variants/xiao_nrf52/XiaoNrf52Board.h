@@ -31,6 +31,13 @@ public:
 
   uint16_t getBattMilliVolts() override;
 
+#ifdef NRF52_POWER_MANAGEMENT
+  // Enter SYSTEMOFF after a runtime low-battery condition.
+  // The XIAO-specific implementation enables LPCOMP so a rising
+  // battery voltage can wake the board automatically.
+  void lowBatteryShutdown() { initiateShutdown(SHUTDOWN_REASON_LOW_VOLTAGE); }
+#endif
+
   const char* getManufacturerName() const override {
     return "Seeed Xiao-nrf52";
   }

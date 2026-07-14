@@ -60,6 +60,54 @@
 
 #define LAZY_CONTACTS_WRITE_DELAY    5000
 
+
+
+bool MyMesh::sendHashtagStatus(const char* hashtag, const char* text) {
+  static constexpr size_t STATUS_TEXT_MAX = 120;
+  if (!hashtag || hashtag[0] != '#' || !text) {
+    MESH_DEBUG_PRINTLN("STATUS: invalid hashtag or text");
+    return false;
+  }
+
+  // Hashtag channel key, as documented by MeshCore:
+  // first 16 bytes of SHA-256("#channel-name"), padded to 32 bytes.
+  mesh::GroupChannel channel{};
+  uint8_t full_hash[PUB_KEY_SIZE];
+  mesh::Utils::sha256(full_hash, sizeof(full_hash),
+                      reinterpret_cast<const uint8_t*>(hashtag), strlen(hashtag));
+  memcpy(channel.secret, full_hash, 16);
+  memset(channel.secret + 16, 0, sizeof(channel.secret) - 16);
+  mesh::Utils::sha256(channel.hash, sizeof(channel.hash), channel.secret, 16);
+
+  uint8_t payload[5 + STATUS_TEXT_MAX + 1];
+  const uint32_t timestamp = getRTCClock()->getCurrentTimeUnique();
+  memcpy(payload, &timestamp, 4);
+  payload[4] = 0; // TXT_TYPE_PLAIN
+
+  const int written = snprintf(reinterpret_cast<char*>(&payload[5]),
+                               sizeof(payload) - 5, "%s: %s",
+                               _prefs.node_name, text);
+  if (written < 0) {
+    MESH_DEBUG_PRINTLN("STATUS: snprintf failed");
+    return false;
+  }
+  const size_t text_len = strnlen(reinterpret_cast<char*>(&payload[5]), STATUS_TEXT_MAX);
+
+  mesh::Packet* pkt = createGroupDatagram(PAYLOAD_TYPE_GRP_TXT, channel,
+                                           payload, 5 + text_len);
+  if (!pkt) {
+    MESH_DEBUG_PRINTLN("STATUS: packet creation failed");
+    return false;
+  }
+
+  // Use the repeater's configured default region/scope. Plain sendFlood(pkt)
+  // can be invisible in installations that deny unscoped flood packets.
+  sendFloodScoped(default_scope, pkt, 0, _prefs.path_hash_mode + 1);
+  MESH_DEBUG_PRINTLN("STATUS: queued for %s: %s", hashtag,
+                     reinterpret_cast<char*>(&payload[5]));
+  return true;
+}
+
 void MyMesh::putNeighbour(const mesh::Identity &id, uint32_t timestamp, float snr) {
 #if MAX_NEIGHBOURS // check if neighbours enabled
   // find existing neighbour, else use least recently updated
