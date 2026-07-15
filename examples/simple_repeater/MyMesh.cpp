@@ -1,6 +1,8 @@
 #include "MyMesh.h"
 #include <algorithm>
 
+static constexpr char STATUS_CHANNEL[] = "#lkgr-info";
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef LORA_FREQ
@@ -1368,8 +1370,20 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, ClientInfo* sender, char *
     command += 3;
   }
 
+  // Solar repeater status test. Works locally over USB serial and remotely
+  // through the authenticated MeshCore admin CLI.
+  if (strcmp(command, "statusmsg") == 0) {
+    const uint16_t battery_mv = board.getBattMilliVolts();
+    char status[96];
+    snprintf(status, sizeof(status), "Testmeldung, Akku %.2f V", battery_mv / 1000.0f);
+    if (sendHashtagStatus(STATUS_CHANNEL, status)) {
+      snprintf(reply, 160, "OK - Statusmeldung an %s eingeplant", STATUS_CHANNEL);
+    } else {
+      strcpy(reply, "Err - Statusmeldung konnte nicht eingeplant werden");
+    }
+  }
   // handle ACL related commands
-  if (memcmp(command, "setperm ", 8) == 0) {   // format:  setperm {pubkey-hex} {permissions-int8}
+  else if (memcmp(command, "setperm ", 8) == 0) {   // format:  setperm {pubkey-hex} {permissions-int8}
     char* hex = &command[8];
     char* sp = strchr(hex, ' ');   // look for separator char
     if (sp == NULL) {
