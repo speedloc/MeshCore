@@ -87,8 +87,7 @@ bool MyMesh::sendHashtagStatus(const char* hashtag, const char* text) {
   payload[4] = 0; // TXT_TYPE_PLAIN
 
   const int written = snprintf(reinterpret_cast<char*>(&payload[5]),
-                               sizeof(payload) - 5, "%s: %s",
-                               _prefs.node_name, text);
+                               sizeof(payload) - 5, "%s", text);
   if (written < 0) {
     MESH_DEBUG_PRINTLN("STATUS: snprintf failed");
     return false;
@@ -1374,8 +1373,9 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, ClientInfo* sender, char *
   // through the authenticated MeshCore admin CLI.
   if (strcmp(command, "statusmsg") == 0) {
     const uint16_t battery_mv = board.getBattMilliVolts();
-    char status[96];
-    snprintf(status, sizeof(status), "Testmeldung, Akku %.2f V", battery_mv / 1000.0f);
+    char status[120];
+    snprintf(status, sizeof(status), "%s, Testmeldung, Akku %.2f V",
+             _prefs.node_name, battery_mv / 1000.0f);
     if (sendHashtagStatus(STATUS_CHANNEL, status)) {
       snprintf(reply, 160, "OK - Statusmeldung an %s eingeplant", STATUS_CHANNEL);
     } else {
