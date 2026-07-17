@@ -109,7 +109,7 @@ void SolarPowerManager::checkLowBattery() {
 
   char status[128];
   snprintf(status, sizeof(status),
-           "[%s] Akku %.2f V, Deep-Sleep bis %.2f V",
+           "%s\nAkku %.2f V, Deep-Sleep bis %.2f V",
            nodeName(), battery_mv / 1000.0f, RESTART_MV / 1000.0f);
 
   if (_mesh->sendHashtagStatus(STATUS_CHANNEL, status)) {
@@ -165,13 +165,13 @@ void SolarPowerManager::tryRecoveryMessage() {
     char offline[24];
     formatOfflineDuration(offline, sizeof(offline), now - _marker.shutdown_timestamp);
     snprintf(status, sizeof(status),
-             "[%s] Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline %s",
+             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline %s",
              nodeName(), current_mv / 1000.0f,
              _marker.shutdown_mv / 1000.0f, offline);
   } else {
     // Fallback for devices whose RTC was not valid at shutdown.
     snprintf(status, sizeof(status),
-             "[%s] Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
+             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
              nodeName(), current_mv / 1000.0f,
              _marker.shutdown_mv / 1000.0f);
   }

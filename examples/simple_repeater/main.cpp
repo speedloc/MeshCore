@@ -2,6 +2,7 @@
 #include <Mesh.h>
 
 #include "MyMesh.h"
+#include "SolarPowerManager.h"
 
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
@@ -12,6 +13,7 @@ StdRNG fast_rng;
 SimpleMeshTables tables;
 
 MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, rtc_clock, tables);
+SolarPowerManager solar_power;
 
 void halt() {
   while (1) ;
@@ -19,102 +21,8 @@ void halt() {
 
 static char command[160];
 
-#if defined(XIAO_NRF52) && defined(NRF52_POWER_MANAGEMENT)
-static constexpr char STATUS_CHANNEL[] = "#lkgr-info";
-static constexpr char LOW_BATTERY_MARKER[] = "/lowbat_shutdown";
-static constexpr uint32_t STATUS_SEND_WAIT_MS = 8000UL;
-
-static bool writeLowBatteryMarker(uint16_t battery_mv) {
-  File f = InternalFS.open(LOW_BATTERY_MARKER, FILE_O_WRITE);
-  if (!f) return false;
-  const size_t written = f.write(reinterpret_cast<const uint8_t*>(&battery_mv), sizeof(battery_mv));
-  f.close();
-  return written == sizeof(battery_mv);
-}
-
-static bool readAndClearLowBatteryMarker(uint16_t& shutdown_mv) {
-  if (!InternalFS.exists(LOW_BATTERY_MARKER)) return false;
-  File f = InternalFS.open(LOW_BATTERY_MARKER, FILE_O_READ);
-  bool valid = false;
-  if (f) {
-    valid = f.read(reinterpret_cast<uint8_t*>(&shutdown_mv), sizeof(shutdown_mv)) == sizeof(shutdown_mv);
-    f.close();
-  }
-  InternalFS.remove(LOW_BATTERY_MARKER);
-  return valid;
-}
-
-static void waitForStatusTransmission() {
-  // Wait for the complete send window even if hasPendingWork() is initially
-  // false. The dispatcher may only expose the queued packet on a later loop.
-  const uint32_t started = millis();
-  while (static_cast<uint32_t>(millis() - started) < STATUS_SEND_WAIT_MS) {
-    the_mesh.loop();
-    sensors.loop();
-    rtc_clock.tick();
-    delay(10);
-  }
-}
-#endif
-
 // For power saving
 unsigned long POWERSAVING_FIRSTSLEEP_SECS = 120; // The first sleep (if enabled) from boot
-
-// XIAO nRF52840 runtime low-battery protection.
-// The existing XIAO power-management code then uses LPCOMP to wake from
-// SYSTEMOFF when the divided battery voltage rises above its hardware threshold.
-#if defined(XIAO_NRF52) && defined(NRF52_POWER_MANAGEMENT)
-static constexpr uint16_t LOW_BATTERY_SHUTDOWN_MV = 3300;
-static constexpr uint32_t LOW_BATTERY_CHECK_INTERVAL_MS = 3600000UL; // 1 hour
-static constexpr uint8_t LOW_BATTERY_CONFIRM_READINGS = 1; // shut down on the hourly reading
-
-static uint32_t last_low_battery_check_ms = 0;
-static uint8_t low_battery_readings = 0;
-
-static void checkRuntimeLowBattery() {
-  const uint32_t now = millis();
-  if ((uint32_t)(now - last_low_battery_check_ms) < LOW_BATTERY_CHECK_INTERVAL_MS) return;
-  last_low_battery_check_ms = now;
-
-  // Do not shut down while USB power is present.
-  if (board.isExternalPowered()) {
-    low_battery_readings = 0;
-    return;
-  }
-
-  const uint16_t battery_mv = board.getBattMilliVolts();
-  if (battery_mv > 1000 && battery_mv <= LOW_BATTERY_SHUTDOWN_MV) {
-    if (low_battery_readings < LOW_BATTERY_CONFIRM_READINGS) low_battery_readings++;
-    MESH_DEBUG_PRINTLN("PWRMGT: Low battery %u mV (%u/%u)", battery_mv,
-      low_battery_readings, LOW_BATTERY_CONFIRM_READINGS);
-  } else {
-    low_battery_readings = 0;
-  }
-
-  if (low_battery_readings >= LOW_BATTERY_CONFIRM_READINGS) {
-    MESH_DEBUG_PRINTLN("PWRMGT: Runtime battery <= %u mV - shutting down",
-      LOW_BATTERY_SHUTDOWN_MV);
-
-    char status[96];
-    snprintf(status, sizeof(status),
-             "⚠️ Akku %.2f V, Deep Sleep bis 3.50 V",
-             battery_mv / 1000.0f);
-    writeLowBatteryMarker(battery_mv);
-    if (the_mesh.sendHashtagStatus(STATUS_CHANNEL, status)) {
-      MESH_DEBUG_PRINTLN("STATUS: waiting %u ms before shutdown", STATUS_SEND_WAIT_MS);
-      waitForStatusTransmission();
-      MESH_DEBUG_PRINTLN("STATUS: send window completed, shutting down");
-    } else {
-      MESH_DEBUG_PRINTLN("STATUS: could not queue shutdown message");
-    }
-
-    radio_driver.powerOff();
-    Serial.flush();
-    delay(100);
-    board.lowBatteryShutdown(); // does not return
-  }
-}
-#endif
 
 #if defined(PIN_USER_BTN) && defined(_SEEED_SENSECAP_SOLAR_H_)
 static unsigned long userBtnDownAt = 0;
@@ -186,19 +94,7 @@ void setup() {
   the_mesh.begin(fs);
 
 #if defined(XIAO_NRF52) && defined(NRF52_POWER_MANAGEMENT)
-  uint16_t previous_shutdown_mv = 0;
-  if (readAndClearLowBatteryMarker(previous_shutdown_mv)) {
-    const uint16_t current_mv = board.getBattMilliVolts();
-    char status[112];
-    snprintf(status, sizeof(status),
-             "✅ Wieder online, Akku %.2f V, Abschaltung bei %.2f V",
-             current_mv / 1000.0f, previous_shutdown_mv / 1000.0f);
-    if (the_mesh.sendHashtagStatus(STATUS_CHANNEL, status)) {
-      MESH_DEBUG_PRINTLN("STATUS: recovery message queued");
-    } else {
-      MESH_DEBUG_PRINTLN("STATUS: recovery message could not be queued");
-    }
-  }
+  solar_power.begin(fs, &the_mesh);
 #endif
 
 #ifdef DISPLAY_CLASS
@@ -232,18 +128,7 @@ void loop() {
     Serial.print('\n');
     command[len - 1] = 0;  // replace newline with C string null terminator
     char reply[160];
-#if defined(XIAO_NRF52) && defined(NRF52_POWER_MANAGEMENT)
-    if (strcmp(command, "statusmsg") == 0) {
-      const uint16_t battery_mv = board.getBattMilliVolts();
-      char status[96];
-      snprintf(status, sizeof(status), "Testmeldung, Akku %.2f V", battery_mv / 1000.0f);
-      const bool queued = the_mesh.sendHashtagStatus(STATUS_CHANNEL, status);
-      snprintf(reply, sizeof(reply), queued ? "Statusmeldung an %s eingeplant" : "Statusmeldung fehlgeschlagen", STATUS_CHANNEL);
-    } else
-#endif
-    {
-      the_mesh.handleCommand(0, NULL, command, reply);  // NOTE: there is no sender_timestamp via serial!
-    }
+    the_mesh.handleCommand(0, NULL, command, reply);  // NOTE: there is no sender_timestamp via serial!
     if (reply[0]) {
       Serial.print("  -> "); Serial.println(reply);
     }
@@ -267,7 +152,7 @@ void loop() {
 #endif
 
 #if defined(XIAO_NRF52) && defined(NRF52_POWER_MANAGEMENT)
-  checkRuntimeLowBattery();
+  solar_power.loop();
 #endif
 
   the_mesh.loop();
