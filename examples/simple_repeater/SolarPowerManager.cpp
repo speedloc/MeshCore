@@ -150,14 +150,6 @@ void SolarPowerManager::tryRecoveryMessage() {
 
   const uint32_t now = _mesh->getRTCClock()->getCurrentTime();
 
-  // Wait until the mesh clock has been restored/synchronised. Sending too early
-  // was the reason the previous recovery message could disappear.
-  if (_marker.shutdown_timestamp >= VALID_UNIX_TIME &&
-      (now < VALID_UNIX_TIME || now < _marker.shutdown_timestamp)) {
-    MESH_DEBUG_PRINTLN("SOLAR: waiting for valid RTC before recovery message");
-    return;
-  }
-
   const uint16_t current_mv = board.getBattMilliVolts();
   char status[128];
 
@@ -165,11 +157,17 @@ void SolarPowerManager::tryRecoveryMessage() {
     char offline[24];
     formatOfflineDuration(offline, sizeof(offline), now - _marker.shutdown_timestamp);
     snprintf(status, sizeof(status),
-             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline %s",
+             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline seit %s",
              nodeName(), current_mv / 1000.0f,
              _marker.shutdown_mv / 1000.0f, offline);
+  } else if (now < VALID_UNIX_TIME ||
+             (_marker.shutdown_timestamp >= VALID_UNIX_TIME &&
+              now < _marker.shutdown_timestamp)) {
+    snprintf(status, sizeof(status),
+             "%s\nWieder online, Akku %.2f V, Bitte Uhrzeit einstellen!",
+             nodeName(), current_mv / 1000.0f);
   } else {
-    // Fallback for devices whose RTC was not valid at shutdown.
+    // The current clock is valid, but shutdown happened without a valid time.
     snprintf(status, sizeof(status),
              "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
              nodeName(), current_mv / 1000.0f,
