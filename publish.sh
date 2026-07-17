@@ -23,19 +23,28 @@ fi
 
 COMMIT_MESSAGE="${*:-Solar repeater update $(date '+%Y-%m-%d %H:%M')}"
 
-echo "==> Baue Firmware vor dem Veröffentlichen"
-./build.sh --clean
-
 echo "==> Prüfe Änderungen"
 git status --short
 
-# Build-Ausgaben und lokale PlatformIO-Dateien gehören nicht ins Repository.
-git add -A -- ':!firmware-output' ':!.pio'
+# Alle Quell- und Dokumentationsdateien aufnehmen. Nur reproduzierbare
+# Build-Ausgaben und lokale PlatformIO-Dateien bleiben bewusst lokal.
+git add -A
 
 if git diff --cached --quiet; then
   echo "Keine Quellcode-Änderungen zum Committen vorhanden."
 else
+  echo "==> Folgende Dateien werden committed"
+  git diff --cached --name-status
   git commit -m "$COMMIT_MESSAGE"
+fi
+
+echo "==> Baue exakt den soeben committed Quellstand"
+./build.sh --clean
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "FEHLER: Der Build hat versionierte Dateien verändert. Push abgebrochen." >&2
+  git status --short
+  exit 1
 fi
 
 echo "==> Push nach origin/$BRANCH"

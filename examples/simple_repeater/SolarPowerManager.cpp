@@ -7,7 +7,8 @@ constexpr char SolarPowerManager::MARKER_FILE[];
 void SolarPowerManager::begin(FILESYSTEM* fs, MyMesh* mesh) {
   _fs = fs;
   _mesh = mesh;
-  _last_check_ms = millis();
+  // Perform the first battery check immediately after startup.
+  _last_check_ms = millis() - CHECK_INTERVAL_MS;
   _next_recovery_try_ms = millis() + RECOVERY_START_DELAY_MS;
   _recovery_pending = loadMarker();
 
@@ -86,6 +87,14 @@ void SolarPowerManager::waitForTransmission() {
   }
 }
 
+const char* SolarPowerManager::nodeName() const {
+  if (_mesh) {
+    const char* configured = _mesh->getNodeName();
+    if (configured && configured[0] != '\0') return configured;
+  }
+  return "Solar Repeater";
+}
+
 void SolarPowerManager::checkLowBattery() {
   // USB power always keeps the board awake for maintenance and updates.
   if (board.isExternalPowered()) return;
@@ -100,8 +109,8 @@ void SolarPowerManager::checkLowBattery() {
 
   char status[128];
   snprintf(status, sizeof(status),
-           "⚠️ %s, Akku %.2f V, Deep Sleep bis %.2f V",
-           _mesh->getNodeName(), battery_mv / 1000.0f, RESTART_MV / 1000.0f);
+           "[%s] Akku %.2f V, Deep-Sleep bis %.2f V",
+           nodeName(), battery_mv / 1000.0f, RESTART_MV / 1000.0f);
 
   if (_mesh->sendHashtagStatus(STATUS_CHANNEL, status)) {
     MESH_DEBUG_PRINTLN("SOLAR: shutdown message queued, waiting for TX");
@@ -156,13 +165,15 @@ void SolarPowerManager::tryRecoveryMessage() {
     char offline[24];
     formatOfflineDuration(offline, sizeof(offline), now - _marker.shutdown_timestamp);
     snprintf(status, sizeof(status),
-             "✅ %s, wieder online, Akku %.2f V, offline %s",
-             _mesh->getNodeName(), current_mv / 1000.0f, offline);
+             "[%s] Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline %s",
+             nodeName(), current_mv / 1000.0f,
+             _marker.shutdown_mv / 1000.0f, offline);
   } else {
     // Fallback for devices whose RTC was not valid at shutdown.
     snprintf(status, sizeof(status),
-             "✅ %s, wieder online, Akku %.2f V, offline unbekannt",
-             _mesh->getNodeName(), current_mv / 1000.0f);
+             "[%s] Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
+             nodeName(), current_mv / 1000.0f,
+             _marker.shutdown_mv / 1000.0f);
   }
 
   if (_mesh->sendHashtagStatus(STATUS_CHANNEL, status)) {

@@ -1374,8 +1374,9 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, ClientInfo* sender, char *
   if (strcmp(command, "statusmsg") == 0) {
     const uint16_t battery_mv = board.getBattMilliVolts();
     char status[120];
-    snprintf(status, sizeof(status), "%s, Testmeldung, Akku %.2f V",
-             _prefs.node_name, battery_mv / 1000.0f);
+    const char* node_name = _prefs.node_name[0] ? _prefs.node_name : "Solar Repeater";
+    snprintf(status, sizeof(status), "[%s] Testmeldung, Akku %.2f V",
+             node_name, battery_mv / 1000.0f);
     if (sendHashtagStatus(STATUS_CHANNEL, status)) {
       snprintf(reply, 160, "OK - Statusmeldung an %s eingeplant", STATUS_CHANNEL);
     } else {

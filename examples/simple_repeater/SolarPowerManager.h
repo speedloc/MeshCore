@@ -9,9 +9,11 @@ public:
   void loop();
 
 private:
-  static constexpr uint16_t SHUTDOWN_MV = 3200;
-  static constexpr uint16_t RESTART_MV = 3400;
-  static constexpr uint32_t CHECK_INTERVAL_MS = 3600000UL;
+  static constexpr uint16_t SHUTDOWN_MV = 3300;
+  static constexpr uint16_t RESTART_MV = 3500;
+  // Active checks run every ten minutes. Recovery from SYSTEMOFF is monitored
+  // continuously by LPCOMP hardware and does not use this interval.
+  static constexpr uint32_t CHECK_INTERVAL_MS = 600000UL;
   static constexpr uint32_t STATUS_SEND_WAIT_MS = 8000UL;
   static constexpr uint32_t RECOVERY_RETRY_MS = 30000UL;
   static constexpr uint32_t RECOVERY_START_DELAY_MS = 15000UL;
@@ -41,4 +43,5 @@ private:
   void checkLowBattery();
   void tryRecoveryMessage();
   void formatOfflineDuration(char* out, size_t out_size, uint32_t seconds) const;
+  const char* nodeName() const;
 };

@@ -5,8 +5,8 @@ Diese Variante basiert auf EasySkyMesh/MeshCore PowerSaving v16.
 ## Verhalten
 
 - Akkuspannung wird im laufenden Betrieb einmal pro Stunde geprüft.
-- Bei **3,20 V oder weniger** wird eine Statusmeldung an `#lkgr-info` eingeplant, der SX1262 abgeschaltet und der nRF52840 in `SYSTEMOFF` versetzt.
-- Der XIAO startet nach Erholung des Akkus und der Bootprüfung wieder ab **3,40 V**.
+- Bei **3,30 V oder weniger** wird eine Statusmeldung an `#lkgr-info` eingeplant, der SX1262 abgeschaltet und der nRF52840 in `SYSTEMOFF` versetzt.
+- Der XIAO startet nach Erholung des Akkus und der Bootprüfung wieder ab **3,50 V**.
 - Bei angeschlossener **USB-Versorgung wird die Boot-Sperre übersprungen**. Damit kann das Gerät auch bei niedrigem Akku für Wartung und Updates gestartet werden.
 - Das vorhandene Akku-BMS bleibt als zusätzlicher Schutz sinnvoll.
 
@@ -14,8 +14,8 @@ Diese Variante basiert auf EasySkyMesh/MeshCore PowerSaving v16.
 
 Vorgesehen sind Meldungen mit dem konfigurierten Repeater-Namen:
 
-- `Repeatername: Akku 3.19 V, Abschaltung bis mindestens 3.40 V`
-- `Repeatername: wieder online, Akku 3.42 V (Abschaltung bei 3.19 V)`
+- `Repeatername: Akku 3.29 V, Deep Sleep bis 3.50 V`
+- `Repeatername: wieder online, Akku 3.52 V, offline 4h 06m`
 
 Der Testbefehl lautet:
 
