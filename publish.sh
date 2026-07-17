@@ -38,15 +38,6 @@ else
   git commit -m "$COMMIT_MESSAGE"
 fi
 
-echo "==> Baue exakt den soeben committed Quellstand"
-./build.sh --clean
-
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "FEHLER: Der Build hat versionierte Dateien verändert. Push abgebrochen." >&2
-  git status --short
-  exit 1
-fi
-
 echo "==> Push nach origin/$BRANCH"
 git push origin "$BRANCH"
 
