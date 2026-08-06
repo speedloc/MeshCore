@@ -1,5 +1,6 @@
 #include "MyMesh.h"
 #include <algorithm>
+#include "helpers/radiolib/RXPowerSaving.h"
 
 static constexpr char STATUS_CHANNEL[] = "#lkgr-info";
 
@@ -62,17 +63,17 @@ static constexpr char STATUS_CHANNEL[] = "#lkgr-info";
 
 #define LAZY_CONTACTS_WRITE_DELAY    5000
 
-
-
-bool MyMesh::sendHashtagStatus(const char* hashtag, const char* text) {
-  static constexpr size_t STATUS_TEXT_MAX = 120;
+bool MyMesh::sendHashtagStatus(const char* hashtag, const char* sender_name, const char* text) {
+  static constexpr size_t STATUS_TEXT_MAX = 160;
   if (!hashtag || hashtag[0] != '#' || !text) {
     MESH_DEBUG_PRINTLN("STATUS: invalid hashtag or text");
     return false;
   }
 
-  // Hashtag channel key, as documented by MeshCore:
-  // first 16 bytes of SHA-256("#channel-name"), padded to 32 bytes.
+  const char* effective_name = (sender_name && sender_name[0]) ? sender_name : "Solar Repeater";
+
+  // Hashtag channel key: first 16 bytes of SHA-256("#channel-name"),
+  // padded to 32 bytes, as used by MeshCore group channels.
   mesh::GroupChannel channel{};
   uint8_t full_hash[PUB_KEY_SIZE];
   mesh::Utils::sha256(full_hash, sizeof(full_hash),
@@ -86,8 +87,9 @@ bool MyMesh::sendHashtagStatus(const char* hashtag, const char* text) {
   memcpy(payload, &timestamp, 4);
   payload[4] = 0; // TXT_TYPE_PLAIN
 
+  // Normal MeshCore group-text representation: "sender: message".
   const int written = snprintf(reinterpret_cast<char*>(&payload[5]),
-                               sizeof(payload) - 5, "%s", text);
+                               sizeof(payload) - 5, "%s: %s", effective_name, text);
   if (written < 0) {
     MESH_DEBUG_PRINTLN("STATUS: snprintf failed");
     return false;
@@ -101,8 +103,6 @@ bool MyMesh::sendHashtagStatus(const char* hashtag, const char* text) {
     return false;
   }
 
-  // Use the repeater's configured default region/scope. Plain sendFlood(pkt)
-  // can be invisible in installations that deny unscoped flood packets.
   sendFloodScoped(default_scope, pkt, 0, _prefs.path_hash_mode + 1);
   MESH_DEBUG_PRINTLN("STATUS: queued for %s: %s", hashtag,
                      reinterpret_cast<char*>(&payload[5]));
@@ -945,8 +945,8 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   _prefs.flood_max_advert = 8;
   _prefs.interference_threshold = 0; // disabled
   _prefs.cad_enabled = 0;            // hardware CAD before TX (off by default; 'set cad on')
-  _prefs.rx_ps_rx_us = RX_POWERSAVING_DEFAULT_RX_US;
-  _prefs.rx_ps_sleep_us = RX_POWERSAVING_DEFAULT_SLEEP_US;
+  _prefs.rx_ps_rx_us = RX_POWERSAVING_DEFAULT_RX_US;  // RX PowerSaving
+  _prefs.rx_ps_sleep_us = RX_POWERSAVING_DEFAULT_SLEEP_US; // RX PowerSaving
 
   // bridge defaults
   _prefs.bridge_enabled = 1;    // enabled
@@ -1387,15 +1387,13 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, ClientInfo* sender, char *
     command += 3;
   }
 
-  // Solar repeater status test. Works locally over USB serial and remotely
-  // through the authenticated MeshCore admin CLI.
+  // Solar repeater status test. Works over USB serial and authenticated remote CLI.
   if (strcmp(command, "statusmsg") == 0) {
     const uint16_t battery_mv = board.getBattMilliVolts();
-    char status[120];
+    char status[96];
+    snprintf(status, sizeof(status), "Testmeldung, Akku %.2f V", battery_mv / 1000.0f);
     const char* node_name = _prefs.node_name[0] ? _prefs.node_name : "Solar Repeater";
-    snprintf(status, sizeof(status), "%s\nTestmeldung, Akku %.2f V",
-             node_name, battery_mv / 1000.0f);
-    if (sendHashtagStatus(STATUS_CHANNEL, status)) {
+    if (sendHashtagStatus(STATUS_CHANNEL, node_name, status)) {
       snprintf(reply, 160, "OK - Statusmeldung an %s eingeplant", STATUS_CHANNEL);
     } else {
       strcpy(reply, "Err - Statusmeldung konnte nicht eingeplant werden");

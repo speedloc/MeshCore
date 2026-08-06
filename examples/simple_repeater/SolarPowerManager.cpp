@@ -109,10 +109,10 @@ void SolarPowerManager::checkLowBattery() {
 
   char status[128];
   snprintf(status, sizeof(status),
-           "%s\nAkku %.2f V, Deep-Sleep bis %.2f V",
-           nodeName(), battery_mv / 1000.0f, RESTART_MV / 1000.0f);
+           "Akku %.2f V, Deep-Sleep bis %.2f V",
+           battery_mv / 1000.0f, RESTART_MV / 1000.0f);
 
-  if (_mesh->sendHashtagStatus(STATUS_CHANNEL, status)) {
+  if (_mesh->sendHashtagStatus(STATUS_CHANNEL, nodeName(), status)) {
     MESH_DEBUG_PRINTLN("SOLAR: shutdown message queued, waiting for TX");
     waitForTransmission();
   } else {
@@ -153,28 +153,32 @@ void SolarPowerManager::tryRecoveryMessage() {
   const uint16_t current_mv = board.getBattMilliVolts();
   char status[128];
 
-  if (_marker.shutdown_timestamp >= VALID_UNIX_TIME && now >= _marker.shutdown_timestamp) {
+  // nRF52 PowerSaving retains the last clock value across resets, but the
+  // internal RTC does not advance during SYSTEMOFF. Require a meaningful
+  // elapsed interval so retained-but-stopped time is not reported as 0 min.
+  if (_marker.shutdown_timestamp >= VALID_UNIX_TIME &&
+      now >= _marker.shutdown_timestamp + 60) {
     char offline[24];
     formatOfflineDuration(offline, sizeof(offline), now - _marker.shutdown_timestamp);
     snprintf(status, sizeof(status),
-             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline seit %s",
-             nodeName(), current_mv / 1000.0f,
+             "Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline seit %s",
+             current_mv / 1000.0f,
              _marker.shutdown_mv / 1000.0f, offline);
   } else if (now < VALID_UNIX_TIME ||
              (_marker.shutdown_timestamp >= VALID_UNIX_TIME &&
               now < _marker.shutdown_timestamp)) {
     snprintf(status, sizeof(status),
-             "%s\nWieder online, Akku %.2f V, Bitte Uhrzeit einstellen!",
-             nodeName(), current_mv / 1000.0f);
+             "Wieder online, Akku %.2f V, Bitte Uhrzeit einstellen!",
+             current_mv / 1000.0f);
   } else {
     // The current clock is valid, but shutdown happened without a valid time.
     snprintf(status, sizeof(status),
-             "%s\nWieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
-             nodeName(), current_mv / 1000.0f,
+             "Wieder online, Akku %.2f V, Abschaltung bei %.2f V, offline unbekannt",
+             current_mv / 1000.0f,
              _marker.shutdown_mv / 1000.0f);
   }
 
-  if (_mesh->sendHashtagStatus(STATUS_CHANNEL, status)) {
+  if (_mesh->sendHashtagStatus(STATUS_CHANNEL, nodeName(), status)) {
     MESH_DEBUG_PRINTLN("SOLAR: recovery message queued, waiting for TX");
     waitForTransmission();
     clearMarker();

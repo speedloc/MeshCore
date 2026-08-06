@@ -162,6 +162,13 @@ protected:
 
 #if ENV_INCLUDE_GPS == 1
   void applyGpsPrefs() {
+    // If powersaving on, apply powersaving to sensors
+    if (_prefs.powersaving_enabled) {
+      sensors.powersaving_enabled = true;
+    } else {
+      sensors.powersaving_enabled = false;
+    }
+
     sensors.setSettingValue("gps", _prefs.gps_enabled?"1":"0");
   }
 #endif
@@ -187,7 +194,7 @@ public:
   const char* getBuildDate() override { return FIRMWARE_BUILD_DATE; }
   const char* getRole() override { return FIRMWARE_ROLE; }
   const char* getNodeName() { return _prefs.node_name; }
-  bool sendHashtagStatus(const char* hashtag, const char* text);
+  bool sendHashtagStatus(const char* hashtag, const char* sender_name, const char* text);
   NodePrefs* getNodePrefs() {
     return &_prefs;
   }
