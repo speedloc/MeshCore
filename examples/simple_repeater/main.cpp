@@ -2,6 +2,7 @@
 #include <Mesh.h>
 
 #include "MyMesh.h"
+#include "SolarPowerManager.h"
 
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
@@ -17,6 +18,7 @@ StdRNG fast_rng;
 SimpleMeshTables tables;
 
 MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, rtc_clock, tables);
+SolarPowerManager solar_power;
 
 void halt() {
   while (1) ;
@@ -117,6 +119,7 @@ void setup() {
   sensors.begin();
 
   the_mesh.begin(fs);
+  solar_power.begin(fs, &the_mesh);
 
 #ifdef DISPLAY_CLASS
   // Added board for battery display
@@ -207,6 +210,7 @@ void loop() {
   ui_task.loop();
 #endif
   rtc_clock.tick();
+  solar_power.loop();
 
 #ifdef HAS_EXTERNAL_WATCHDOG
   external_watchdog.loop();

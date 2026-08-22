@@ -31,6 +31,14 @@ public:
 
   uint16_t getBattMilliVolts() override;
 
+#ifdef NRF52_POWER_MANAGEMENT
+  // Enter SYSTEMOFF for a low-voltage event and keep LPCOMP enabled so the
+  // board starts again automatically after the battery reaches the bootlock.
+  void lowBatteryShutdown() {
+    initiateShutdown(SHUTDOWN_REASON_LOW_VOLTAGE);
+  }
+#endif
+
   const char* getManufacturerName() const override {
     return "Seeed Xiao-nrf52";
   }
